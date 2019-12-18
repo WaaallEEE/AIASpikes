@@ -26,9 +26,10 @@ def check_compression_rename_fits(fits_file):
     os.rename(fits_file, new_fits_f)
 
 
-datadir = os.environ['SPIKESDATA']
-print('listing files...')
-flist = sorted(Path(datadir).rglob('*.fits'))
+data_dir = os.environ['SPIKESDATA']
+print('listing files in ', data_dir)
+
+flist = sorted(Path(data_dir).rglob('*.fits'))
 
 print('Starting parallel jobs...')
 with Pool(processes=4) as p:
