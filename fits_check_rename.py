@@ -26,7 +26,7 @@ def check_compression_rename_fits(fits_file):
     os.rename(fits_file, new_fits_f)
 
 
-datadir = os.path.join(os.environ['DATA'], 'michael/spikes_project/AIA_spikes/temp/13')
+datadir = os.environ['SPIKESDATA']
 print('listing files...')
 flist = sorted(Path(datadir).rglob('*.fits'))
 
