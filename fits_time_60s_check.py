@@ -7,7 +7,7 @@ import fastparquet
 parent_dir = os.environ['SPIKESDATA']
 
 tstart = time.time()
-flist = os.path.join(parent_dir, 'file_list.txt')
+flist = os.path.join(parent_dir, 'file_list_2010.txt')
 print('Creating dataframe from list in text file at ', flist)
 df = pd.read_csv(flist, names=['path_str'], dtype=object)
 time1 = time.time()
@@ -20,7 +20,8 @@ time2 = time.time()
 etime2 = time2 - time1
 print('elapsed time: ', etime2)
 print('Extracting filenames...')
-df['filename'] = df['path_str'].apply(lambda s: Path(s).name)
+# df['filename'] = df['path_str'].apply(lambda s: Path(s).name)
+df['filename'] = df['path_str'].apply(lambda s: s.split('/')[-1])
 time3 = time.time()
 etime3 = time3 - time2
 print('elapsed time: ', etime3)
