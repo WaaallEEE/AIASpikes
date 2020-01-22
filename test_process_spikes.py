@@ -5,9 +5,21 @@ from astropy.io import fits
 import fitsio
 
 
-def get_filepaths(group_index, file_paths, unique_indices, group_count, data_directory):
-    path_index = unique_indices[group_index]
-    count = group_count[group_index]
+def get_filepaths(group_nb, file_paths, unique_indices, group_count, data_directory):
+    """ Get the path of each file belonging to the given group number
+
+    :param group_nb: group number
+    :param file_paths: numpy array of all relative file paths
+    :param unique_indices: indices of the unique group number
+    :param group_count: how many files in that group
+    :param data_directory: directory to append relative paths to make them absolute
+    :return:
+    """
+
+    # Get the path of each file of the given group number (group_index).
+    path_index = unique_indices[group_nb]
+    # Get how many files in the group (should typically be 7, for 7 wavelengths)
+    count = group_count[group_nb]
     paths = [os.path.join(data_directory, fpath[0].decode('UTF-8')) for fpath in file_paths[path_index:path_index + count]]
     return paths
 
@@ -25,7 +37,16 @@ def filter_spike_file_rename(n_co_spikes, old_filename, output_dir):
 
 
 def count_intersect(raw_spikes, coincidental_1d_coords, count_filter_idx, counts):
-    # intersect the coincidentals coordinates with the coordinates in the raw spikes for one given wavelength
+    """ Provides the coincidental coordinates and their indices in the raw spike file and occurence count
+    within the group. The indices in the raw spike file are used to retrieve the intensity values (before/after)
+
+    :param raw_spikes: list of spikes for one wavelength
+    :param coincidental_1d_coords: list of 1D coordinates of coincidental spikes integrated for the whole group
+    :param count_filter_idx: list of indices of the coincidental spikes mapping to the original list of spikes coords.
+    :param counts: distribution of spikes coords
+    :return: Coincidental coordinates, index in spike file, number of occurences >=n_co_spikes
+    """
+
     file_coords, idx1, idx2 = np.intersect1d(raw_spikes[0, :], coincidental_1d_coords, return_indices=True)
     # Retrieve how many coincidental hits we had within the 8 neighbours.
     group_counts = counts[count_filter_idx[idx2]]
@@ -45,24 +66,24 @@ def accumulate_spikes(spikes_list, n_co_spikes=2):
     :return:
     """
 
-
     # spikes list: [7 files] x [1D coordinates, intensity before despiking replacement, intensity after despiking]
     cumulated_spikes_coords = np.unique(index_8nb[:, spikes_list[0][0, :]].ravel())
     for raw_spikes in spikes_list[1:]:
-        # Accumulate the coordinates across the 7 files into a single 1D array. Recurrent coordinates within 8-neighbours will
+        # Accumulate the coordinates across the 7 files into a single 1D array.
         cumulated_spikes_coords = np.concatenate([cumulated_spikes_coords, np.unique(index_8nb[:, raw_spikes[0, :]].ravel())])
     # Make a curated distribution (numbers that do not exist aren't covered by the algorithm => faster than histogram)
     (distrib_values, counts) = np.unique(cumulated_spikes_coords, return_counts=True) # 35 ms
+    # Get the indices of the coordinates that get hit more than n_co_spikes times
     count_filter_idx = np.where(counts >= n_co_spikes)[0]
-    # Get the spikes coordinates that show up at least n_co_spikes times
+    # Get these coincicental spikes coordinates
     coincidental_1d_coords = distrib_values[count_filter_idx] # 1 ms
-
+    # Here we have "lost" the info of from which wavelength these hits come from, and how many exactly.
+    # Get back to that information by intersecting these coincidental coordinates per wavelength (per file in the group)
     group_coords, group_idx, group_counts = zip(*[count_intersect(raw_spikes, coincidental_1d_coords, count_filter_idx, counts)
                                                   for raw_spikes in spikes_list])
 
-    #coincidental_spikes_masks = [np.isin(raw_spikes[0, :], coincidental_1d_coords) for raw_spikes in spikes_list]
+    # coincidental_spikes_masks = [np.isin(raw_spikes[0, :], coincidental_1d_coords) for raw_spikes in spikes_list]
     return group_coords, group_idx, group_counts
-
 
 
 def process_spikes(group_index, n_co_spikes=2, hdu_only=False):
@@ -83,8 +104,6 @@ def process_spikes(group_index, n_co_spikes=2, hdu_only=False):
     write_new_spikes_files2(spikes_list, group_coords, group_idx, group_counts, fpaths, hdu_only=hdu_only)
 
     return group_index
-
-
 
 
 def write_new_spikes_files(spikes_list, group_coords, group_idx, group_counts, paths, n_co_spikes=2, hdu_only=False):
@@ -133,12 +152,13 @@ def write_new_spikes_files3(spikes_list, group_coords, group_idx, group_counts, 
 
 # Location of database file referencing the so-called "spikes files").
 data_dir = os.environ['SPIKESDATA']
-db_filepath = os.path.join(data_dir, 'Table_SpikesDB2.h5')
+# db_filepath = os.path.join(data_dir, 'Table_SpikesDB2.h5')
+db_filepath = os.path.join(data_dir, 'spikes_df_2010.parquet')
 # Output directory where the filtered spikes fits files will be written.
 output_dir = os.path.join(data_dir, 'filtered')
-
 # Open the data base as a store.
-spikes_db = pd.HDFStore(db_filepath)
+# spikes_db = pd.HDFStore(db_filepath)
+spikes_db = pd.read_parquet(db_filepath, engine='pyarrow')
 ####################################################################################################
 # Break out file paths grouped by group numbers out of the database (why did I do the above then?).
 # There should be a Pandas' way to extract file paths by same group numbers.
@@ -161,19 +181,18 @@ coordy, coordx = np.unravel_index(coords_1d, [ny, nx]) # also possible by raveli
 coords2d = np.array([coordy, coordx])
 # Create the array of 2D coordinates of 8-neighbours associated with each pixel.
 # pixel 0 has 8 neighbour + itself, pixel 1 has 8 neighbour + itself, etc...
-coords2d_8nb =  coords2d[np.newaxis, ...] + coords_8nb[..., np.newaxis]
+coords2d_8nb = coords2d[np.newaxis, ...] + coords_8nb[..., np.newaxis]
 # Handle off-edges coordinates by clipping to the edges, operation done in-place. Here, square detector assumed. Update
 # to per-axis clipping if that ever changes for another instrument.
 np.clip(coords2d_8nb, 0, nx-1, out=coords2d_8nb)
 # Convert to 1D coordinates.
-index_8nb = np.array([ coords2d_8nb[i, 0, :] * nx + coords2d_8nb[i, 1, :] for i in range(len(coords_8nb))],
+index_8nb = np.array([coords2d_8nb[i, 0, :] * nx + coords2d_8nb[i, 1, :] for i in range(len(coords_8nb))],
                      dtype='int32', order='C')
 
+# for group_n in ugroups:
+group_n = 0
 
-
-group_index = 0
-
-fpaths = get_filepaths(group_index, nppaths, uinds, ugroupc, data_dir)
+fpaths = get_filepaths(group_n, nppaths, uinds, ugroupc, data_dir)
 # Read spikes fits files. They contain 3 columns:
 # (1) 1D coordinates, (2) intensity before despiking replacement, (3) intensity after despiking.
 spikes_list = [fitsio.read(path) for path in fpaths]
