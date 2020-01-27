@@ -20,7 +20,7 @@ def get_filepaths(group_nb, file_paths, unique_indices, group_count, data_direct
     path_index = unique_indices[group_nb]
     # Get how many files in the group (should typically be 7, for 7 wavelengths)
     count = group_count[group_nb]
-    paths = [os.path.join(data_directory, fpath[0].decode('UTF-8')) for fpath in file_paths[path_index:path_index + count]]
+    paths = [os.path.join(data_directory, fpath) for fpath in file_paths[path_index:path_index + count]]
     return paths
 
 
@@ -80,13 +80,14 @@ def accumulate_spikes(spikes_list, n_co_spikes=2):
     # Here we have "lost" the info of from which wavelength these hits come from, and how many exactly.
     # Get back to that information by intersecting these coincidental coordinates per wavelength (per file in the group)
     group_coords, group_idx, group_counts = zip(*[count_intersect(raw_spikes, coincidental_1d_coords, count_filter_idx, counts)
-                                                  for raw_spikes in spikes_list])
+                                                  for i, raw_spikes in enumerate(spikes_list)])
+
 
     # coincidental_spikes_masks = [np.isin(raw_spikes[0, :], coincidental_1d_coords) for raw_spikes in spikes_list]
     return group_coords, group_idx, group_counts
 
 
-def process_spikes(group_index, n_co_spikes=2, hdu_only=False):
+def process_spikes(group_index, n_co_spikes=2):
     """
      Get the paths to all files belonging to the group numbered by group_index.
      There are typically 7 files per group
@@ -100,26 +101,15 @@ def process_spikes(group_index, n_co_spikes=2, hdu_only=False):
     # Read spikes fits files. They contain 3 columns:
     # (1) 1D coordinates, (2) intensity before despiking replacement, (3) intensity after despiking.
     spikes_list = [fitsio.read(path) for path in fpaths]
-    group_coords,  group_idx, group_counts = accumulate_spikes(spikes_list)
-    write_new_spikes_files2(spikes_list, group_coords, group_idx, group_counts, fpaths, hdu_only=hdu_only)
+    group_coords,  group_idx, group_counts = accumulate_spikes(spikes_list, n_co_spikes=n_co_spikes)
+
+
+    #write_new_spikes_files2(spikes_list, group_coords, group_idx, group_counts, fpaths)
 
     return group_index
 
 
-def write_new_spikes_files(spikes_list, group_coords, group_idx, group_counts, paths, n_co_spikes=2, hdu_only=False):
-    for i, (raw_spikes, coords, spike_idx, counts) in enumerate(zip(spikes_list, group_coords, group_idx, group_counts)):
-        data_stack = np.stack((coords, raw_spikes[1, spike_idx], raw_spikes[2, spike_idx], counts))
-        hdu = fits.PrimaryHDU(data_stack)
-        if hdu_only:
-            continue
-        else:
-            # Write the new fits files
-            new_name = filter_spike_file_rename(n_co_spikes, paths[i], output_dir)
-            hdu.writeto(new_name, overwrite=True)
-    return
-
-
-def write_new_spikes_files2(spikes_list, group_coords, group_idx, group_counts, paths, n_co_spikes=2, hdu_only=False):
+def write_new_spikes_files2(spikes_list, group_coords, group_idx, group_counts, paths, n_co_spikes=2):
     for i, (raw_spikes, coords, spike_idx, counts) in enumerate(zip(spikes_list, group_coords, group_idx, group_counts)):
 
         col1 = fits.Column(name='coords', format='J', array=coords.astype(np.int32))
@@ -135,25 +125,11 @@ def write_new_spikes_files2(spikes_list, group_coords, group_idx, group_counts, 
     return
 
 
-# That one is significantly slower and creates much bigger files
-def write_new_spikes_files3(spikes_list, group_coords, group_idx, group_counts, paths, n_co_spikes=2, hdu_only=False):
-    for i, (raw_spikes, coords, spike_idx, counts) in enumerate(zip(spikes_list, group_coords, group_idx, group_counts)):
-        dstack = np.stack((coords,
-                           raw_spikes[1, spike_idx],
-                           raw_spikes[2, spike_idx],
-                           counts)).astype(np.int32)
-
-        new_name = filter_spike_file_rename(n_co_spikes, paths[i], output_dir)
-
-        fitsio.write(new_name, dstack, compress='rice', clobber=True)
-
-    return
-
 
 # Location of database file referencing the so-called "spikes files").
 data_dir = os.environ['SPIKESDATA']
 # db_filepath = os.path.join(data_dir, 'Table_SpikesDB2.h5')
-db_filepath = os.path.join(data_dir, 'spikes_df_2010.parquet')
+db_filepath = os.path.join(data_dir, 'spikes_df.parquet')
 # Output directory where the filtered spikes fits files will be written.
 output_dir = os.path.join(data_dir, 'filtered')
 # Open the data base as a store.
@@ -189,14 +165,30 @@ np.clip(coords2d_8nb, 0, nx-1, out=coords2d_8nb)
 index_8nb = np.array([coords2d_8nb[i, 0, :] * nx + coords2d_8nb[i, 1, :] for i in range(len(coords_8nb))],
                      dtype='int32', order='C')
 
+# Create output dataframe
+spikes_db2 = pd.DataFrame(columns=['GroupNumber', 'Time', 'Path',
+                                   'Wavelength', 'Count', 'Coordinates', 'Intensity_1', 'Intensity_2'])
+
 # for group_n in ugroups:
 group_n = 0
 
+# timeit -> year 2010:   8 years:
 fpaths = get_filepaths(group_n, nppaths, uinds, ugroupc, data_dir)
 # Read spikes fits files. They contain 3 columns:
 # (1) 1D coordinates, (2) intensity before despiking replacement, (3) intensity after despiking.
+# timeit -> year 2010: 4 ms  8 years:
 spikes_list = [fitsio.read(path) for path in fpaths]
+# timeit -> year 2010: 103 ms  8 years:
 group_coords, group_idx, group_counts = accumulate_spikes(spikes_list)
-write_new_spikes_files2(spikes_list, group_coords, group_idx, group_counts, fpaths, hdu_only=False)
+# write_new_spikes_files2(spikes_list, group_coords, group_idx, group_counts, fpaths, hdu_only=False)
 
 
+spiked_df = pd.DataFrame(group_coords, columns=['X'])
+
+# Create output dataframe
+# spikes_db2 = pd.DataFrame({'GroupNumber': group_n,
+#                            'Time': spikes_db2.loc[group_n].index,
+#                            'Path': spikes_db2.loc[group_n]['Path'],
+#                            'Wavelength': spikes_db2.loc[group_n]['Wavelength'],
+#                            'Count': group_counts,
+#                            'Coordinates', 'Intensity_1', 'Intensity_2'])
