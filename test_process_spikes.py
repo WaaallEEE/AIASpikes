@@ -87,14 +87,14 @@ def accumulate_spikes(spikes_list, n_co_spikes=2):
     return group_coords, group_idx, group_counts
 
 
-def thin_array(arr):
+def filter_array(arr):
 
     arr_1d = arr.ravel()
     u_elem, c = np.unique(arr_1d, return_counts=True)
     # Keep only coordinates with no overlap with the neighbour within the group
     duplicates = u_elem[c > 1]
-    dup_idx = np.array([np.where(arr_1d == d)[0][0] for d in duplicates])
-    dup_rows = np.unique((dup_idx / arr.shape[1]).astype(int))
+    dup_idx = np.concatenate([np.where(arr_1d == d)[0] for d in duplicates])
+    dup_rows = np.unique(dup_idx // arr.shape[1])
 
     b = np.delete(arr, dup_rows, axis=0)
 
@@ -116,7 +116,7 @@ def accumulate_spikes2(spikes_list, n_co_spikes=2):
     :return:
     """
 
-    spikes_arrays = [thin_array(index_8nb[:, raw_spikes[0, :]]) for raw_spikes in spikes_list]
+    spikes_arrays = [filter_array(index_8nb[:, raw_spikes[0, :]]) for raw_spikes in spikes_list]
     # spikes list: [7 files] x [1D coordinates, intensity before despiking replacement, intensity after despiking]
     u_spikes = np.array([spikes_nb.ravel() for spikes_nb in spikes_arrays])
     # Make a curated distribution (numbers that do not exist aren't covered by the algorithm => faster than histogram)
