@@ -89,14 +89,10 @@ def accumulate_spikes(spikes_list, n_co_spikes=2):
 
 def filter_array(arr):
 
-    arr_1d = arr.ravel()
-    u_elem, c = np.unique(arr_1d, return_counts=True)
-    # Keep only coordinates with no overlap with the neighbour within the group
-    duplicates = u_elem[c > 1]
-    dup_idx = np.concatenate([np.where(arr_1d == d)[0] for d in duplicates])
-    dup_rows = np.unique(dup_idx // arr.shape[1])
-
-    b = np.delete(arr, dup_rows, axis=0)
+    # Make a count of only the existing numbers (faster than histogram)
+    u, c = np.unique(arr, return_counts=True)
+    # Keep only rows that have values unique between rows
+    b = np.isin(arr, u[c == 1]).all(axis=1)
 
     return b
 
