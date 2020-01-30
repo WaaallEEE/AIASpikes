@@ -88,13 +88,13 @@ def accumulate_spikes(spikes_list, n_co_spikes=2):
 
 
 def filter_array(arr):
-
+    # typically around 8 ms for a spikes file. (about 2 days for the whole data archive)
     # Make a count of only the existing numbers (faster than histogram)
     u, c = np.unique(arr, return_counts=True)
     # Keep only rows that have values unique between rows
     b = np.isin(arr, u[c == 1]).all(axis=1)
 
-    return b
+    return arr[b, :]
 
 
 
@@ -102,40 +102,25 @@ def filter_array(arr):
 def accumulate_spikes2(spikes_list, n_co_spikes=2):
     """
     Within a group of up to 7 files:
-    - accumulate a list of 1D coordinates within the 8 nearest neighbours of a spike coordinate.
-    - get the coordinates that is populated more than once
-    - create a mask for each spike file that maps ones to those coordinates satisfying the coincidental criterion above.
-
-    REQUIRES NUMPY >= 1.15 for returning indices out of numpy.intersect1d()
+    - Take each wavelength and look if the coordinates overlap with those of the other wavelength
 
     :param spikes_list:
     :return:
     """
 
-    spikes_arrays = [filter_array(index_8nb[:, raw_spikes[0, :]]) for raw_spikes in spikes_list]
-    # spikes list: [7 files] x [1D coordinates, intensity before despiking replacement, intensity after despiking]
-    u_spikes = np.array([spikes_nb.ravel() for spikes_nb in spikes_arrays])
-    # Make a curated distribution (numbers that do not exist aren't covered by the algorithm => faster than histogram)
-    (distrib_values, counts) = np.unique(u_spikes, return_counts=True) # 35 ms
-    # Get the indices of the coordinates that get hit more than n_co_spikes times
-    coincidental_1d_coords = distrib_values[counts >= n_co_spikes]
+    # For 1st wavelength
+    spikes_pix = [[spikes[0, :] for spikes in spikes_list[i + 1:]] for i in range(6)]
+    masks = [np.isin(index_8nb[pixels_w, :], index_8nb[spikes_list[0][0, :], :]).any(axis=1)
+             for pixels_w in spikes_pix[0]]
 
-    # For each of the 7 files
-    # Get these coincicental spikes coordinates
-    coords, idx1, idx2 = np.intersect1d(u_spikes[0], coincidental_1d_coords, return_indices=True)
-    # which rows in the neighbour array?
-    rows = np.unique((idx1 / spikes_arrays[0].shape[1]).astype(int))
-    select_spikes_coords = spikes_arrays[0][rows, 0]
-    raw_spikes_idx = [np.where(spikes_list[0][0, :] == s) for s in select_spikes_coords]
+    # This will fetch the list of coordinates from the wavelength 0 that are found in all other wavelengths
+    #TODO: must iterate over the other wavelengths
 
-    # Here we have "lost" the info of from which wavelength these hits come from, and how many exactly.
-    # Get back to that information by intersecting these coincidental coordinates per wavelength (per file in the group)
-    group_coords, group_idx, group_counts = zip(*[count_intersect(raw_spikes, coincidental_1d_coords, count_filter_idx, counts)
-                                                  for i, raw_spikes in enumerate(spikes_list)])
+    #print(len(masks[0]))
+    #print(len(spikes_list[1][0, :]))
 
 
-    # coincidental_spikes_masks = [np.isin(raw_spikes[0, :], coincidental_1d_coords) for raw_spikes in spikes_list]
-    return group_coords, group_idx, group_counts
+    return
 
 
 
