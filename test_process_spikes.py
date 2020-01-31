@@ -118,6 +118,54 @@ def accumulate_spikes2(spikes_list, n_co_spikes=2):
 
     #print(len(masks[0]))
     #print(len(spikes_list[1][0, :]))
+    column_names = ['coords', 'int1', 'int2', 'w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'w7']
+    # column_names_list = [[names for names in column_names[:i]+column_names[i+1:]] for i in range(7)]
+
+    df = pd.DataFrame(columns=column_names)
+    df.head()
+
+    spikes_pix = [[spikes[0, :] for spikes in spikes_list[:i] + spikes_list[i + 1:]] for i in range(7)]
+
+    # For 1st wavelength ~112 ms (%%timeit)
+
+    pixels_ws = [spikes_list[i][0, :] for i in range(7)]
+    nb_pixels_w1 = index_8nb[pixels_ws[0], :]
+    # print(len(nb_pixels_w1))
+
+    mask_w2_in_w1 = np.isin(nb_pixels_w1, index_8nb[pixels_ws[1], :]).any(axis=1)
+    mask_w3_in_w1 = np.isin(nb_pixels_w1, index_8nb[pixels_ws[2], :]).any(axis=1)
+    # mask_w4_in_w1 = np.isin(nb_pixels_w1, index_8nb[pixels_ws[3], :]).any(axis=1)
+    # mask_w5_in_w1 = np.isin(nb_pixels_w1, index_8nb[pixels_ws[4], :]).any(axis=1)
+    # mask_w6_in_w1 = np.isin(nb_pixels_w1, index_8nb[pixels_ws[5], :]).any(axis=1)
+    # mask_w7_in_w1 = np.isin(nb_pixels_w1, index_8nb[pixels_ws[6], :]).any(axis=1)
+
+    masks_w1 = [np.isin(nb_pixels_w1, index_8nb[pixels, :]).any(axis=1) for pixels in spikes_pix[0]]
+    mask_w1_arr = np.array(masks_w1)
+    select_pixels = mask_w1_arr.any(axis=0)
+    coords_w1 = pixels_ws[0][select_pixels]  # Combine the mask to fetch everything in one go, using broadcasting??
+    w1tables = np.insert(mask_w1_arr[:, select_pixels], 1, True, axis=0)
+    w1_arr = np.concatenate([coords_w1[np.newaxis, ...], w1tables], axis=0)
+    print(w1_arr.shape)
+
+    df1 = pd.DataFrame(w1_arr.T, columns=['coords', 'w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'w7'])
+    print(df1.head())
+
+    # For 2nd wavelength
+
+    reduction_mask = np.isin(pixels_ws[1], coords_w1, invert=True)
+    pixels_w2_new = pixels_ws[1][reduction_mask]
+
+    nb_pixels_w2 = index_8nb[pixels_w2_new, :]
+
+    masks_w2 = [np.isin(nb_pixels_w2, index_8nb[pixels, :]).any(axis=1) for pixels in spikes_pix[1]]
+    mask_w2_arr = np.array(masks_w2)
+    select_pixels = mask_w2_arr.any(axis=0)
+    coords_w2 = pixels_w2_new[select_pixels]  # Combine the mask to fetch everything in one go, using broadcasting??
+    w2tables = np.insert(mask_w2_arr[:, select_pixels], 1, True, axis=0)
+
+    w2_arr = np.concatenate([coords_w2[np.newaxis, ...], w2tables], axis=0)
+    print(w2_arr.shape)
+    w12 = np.concatenate([w1_arr, w2_arr], axis=1)
 
 
     return
