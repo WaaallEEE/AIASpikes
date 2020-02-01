@@ -116,6 +116,8 @@ def accumulate_spikes2(spikes_list, n_co_spikes=2):
     # This will fetch the list of coordinates from the wavelength 0 that are found in all other wavelengths
     #TODO: must iterate over the other wavelengths
 
+
+
     #print(len(masks[0]))
     #print(len(spikes_list[1][0, :]))
     column_names = ['coords', 'int1', 'int2', 'w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'w7']
@@ -168,7 +170,26 @@ def accumulate_spikes2(spikes_list, n_co_spikes=2):
     w12 = np.concatenate([w1_arr, w2_arr], axis=1)
 
 
+    # For 3rd wavelength
+
+    reduction_mask = np.isin(pixels_ws[2], coords_w2, invert=True)
+    pixels_w3_new = pixels_ws[1][reduction_mask]
+
     return
+
+
+def extract_coincidentals(spikes_w, spikes_pix):
+    nb_pixels = index_8nb[spikes_w[0, :], :]
+
+    mask_w_arr = np.array([np.isin(nb_pixels, index_8nb[pixels, :]).any(axis=1) for pixels in spikes_pix])
+    select_pixels = mask_w_arr.any(axis=0)
+    coords_w = spikes_w[0, select_pixels]
+    w_tables = np.insert(mask_w_arr[:, select_pixels], 0, True, axis=0)
+    # Retrieve intensity values for the selected coordinates
+    intensities = spikes_w[1:, select_pixels]
+    arr_w = np.concatenate([coords_w[np.newaxis, ...], intensities, w_tables], axis=0)
+
+    return arr_w
 
 
 
