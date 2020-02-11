@@ -76,9 +76,9 @@ if __name__ == '__main__':
 
     t1 = time.time()
 
-    with Pool(processes=8) as pool:
+    with Pool(processes=64) as pool:
         # tinterval = tintervals[0]
-        groups= spikes_df['GroupNumber'].loc[(spikes_df['Time'] >= '2010-12-01 00:00:00') &  (spikes_df['Time'] < '2010-12-01 23:59:59')].unique()
+        groups = spikes_df['GroupNumber'].loc[(spikes_df['Time'] >= '2010-12-01 00:00:00') &  (spikes_df['Time'] < '2010-12-01 23:59:59')].unique()
         # groups= spikes_df['GroupNumber'].loc[(spikes_df['Time'] >= tinterval.left) &  (spikes_df['Time'] < tinterval.right)].unique()
         group_df_list = pool.map(process_group, groups, 100)
 
