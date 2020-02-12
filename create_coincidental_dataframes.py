@@ -2,8 +2,7 @@ import os
 import pandas as pd
 import numpy as np
 import fitsio
-from pathlib import Path, PurePath
-import multiprocessing
+from pathlib import PurePath
 from multiprocessing import Pool
 import time
 
@@ -65,7 +64,6 @@ def process_group(group_n):
 if __name__ == '__main__':
 
     outputdir = os.path.join(os.environ['SPIKESDATA'], 'parquet_dataframes')
-
     # Create data for lookup from the child processes.
     index_8nb = create_lookup_8nb(4096, 4096)
     spikes_df = pd.read_parquet(os.path.join(os.environ['SPIKESDATA'], 'spikes_df_2010_filtered.parquet'), engine='pyarrow')
@@ -76,11 +74,18 @@ if __name__ == '__main__':
 
     t1 = time.time()
 
-    with Pool(processes=64) as pool:
-        # tinterval = tintervals[0]
-        groups = spikes_df['GroupNumber'].loc[(spikes_df['Time'] >= '2010-12-01 00:00:00') &  (spikes_df['Time'] < '2010-12-01 23:59:59')].unique()
-        # groups= spikes_df['GroupNumber'].loc[(spikes_df['Time'] >= tinterval.left) &  (spikes_df['Time'] < tinterval.right)].unique()
-        group_df_list = pool.map(process_group, groups, 100)
+    with Pool(processes=8) as pool:
+        for tinterval in tintervals[0:2]:
+            # groups = spikes_df['GroupNumber'].loc[(spikes_df['Time'] >= '2010-12-01 21:00:00') & (spikes_df['Time'] < '2010-12-01 23:59:59')].unique()
+            groups= spikes_df['GroupNumber'].loc[(spikes_df['Time'] >= tinterval.left) & (spikes_df['Time'] < tinterval.right)].unique()
+            group_df_list = pool.map(process_group, groups, 100)
+            df = pd.concat(group_df_list)
+            # Write to parquet file
+            date = tinterval.left
+            day_dir = PurePath(outputdir, '{:d}/{:02d}'.format(date.year, date.month))
+            os.makedirs(day_dir)
+            df_path = PurePath(day_dir, 'df_coincidentals_{:d}_{:02d}_{:02d}.parquet'.format(date.year, date.month, date.day))
+            df.to_parquet(df_path, engine='pyarrow', compression=None)
 
     etime = time.time() - t1
 
