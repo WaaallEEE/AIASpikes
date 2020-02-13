@@ -3,9 +3,10 @@ import pandas as pd
 import numpy as np
 import fitsio
 from pathlib import Path, PurePath
-from multiprocessing import Pool, Manager
+from multiprocessing import Pool
 import time
 import logging
+import threading
 
 
 def create_lookup_8nb(nx, ny):
@@ -62,13 +63,13 @@ def process_group(group_n):
     return coincidental_spikes_df
 
 
-def write_to_parquet(ns, df_path):
+def write_to_parquet(df_list, date):
     logger.info('Writing to parquet')
-    # day_dir = PurePath(outputdir, '{:d}/{:02d}'.format(date.year, date.month)).as_posix()
-    # Path(day_dir).mkdir(parents=True, exist_ok=True)
-    # df_path = PurePath(day_dir, 'df_coincidentals_{:d}_{:02d}_{:02d}.parquet'.format(date.year, date.month, date.day)).as_posix()
-    ns.df.to_parquet(df_path, engine='pyarrow', compression=None)
-    # print('parquet file created: {:s}'.format(df_path))
+    month_dir = PurePath(outputdir, '{:d}/{:02d}'.format(date.year, date.month)).as_posix()
+    Path(month_dir).mkdir(parents=True, exist_ok=True)
+    df_path = PurePath(month_dir, 'df_coincidentals_{:d}_{:02d}_{:02d}.parquet'.format(date.year, date.month, date.day)).as_posix()
+    df = pd.concat(df_list)
+    df.to_parquet(df_path, engine='pyarrow', compression=None)
     logger.info('parquet file created: {:s}'.format(df_path))
     return df_path
 
@@ -86,41 +87,39 @@ if __name__ == '__main__':
 
     # Create data for lookup from the child processes.
     index_8nb = create_lookup_8nb(4096, 4096)
-    spikes_df = pd.read_parquet(os.path.join(os.environ['SPIKESDATA'], 'spikes_df_2010_filtered.parquet'), engine='pyarrow')
+    spikes_df = pd.read_parquet(os.path.join(os.environ['SPIKESDATA'], 'spikes_df_2010_filtered.parquet'),
+                                engine='pyarrow')
     spikes_df2 = spikes_df.set_index(['GroupNumber', 'Time'])
     path_Series = spikes_df2['Path']
-    tintervals = pd.interval_range(start=pd.Timestamp('2010-05-13 00:00:00', tz='UTC'), end=pd.Timestamp('2011-01-01 00:00:00', tz='UTC'),
+    tintervals = pd.interval_range(start=pd.Timestamp('2010-05-13 00:00:00', tz='UTC'),
+                                   end=pd.Timestamp('2011-01-01 00:00:00', tz='UTC'),
                                    freq='D', closed='left')
 
-    mgr = Manager()
-    ns = mgr.Namespace()
     n_workers = 60
     tstart = time.time()
     logger.info('Starting pool of {:d} workers'.format(n_workers))
+
+    # start, end = pd.Timestamp('2010-05-13 00:00:00', tz='UTC'), pd.Timestamp('2010-05-13 02:00:00', tz='UTC')
+    # tintervals = [pd.Interval(left=pd.Timestamp('2010-05-13 00:00:00', tz='UTC'), right=pd.Timestamp('2010-05-13 04:00:00', tz='UTC')),
+    #               pd.Interval(left=pd.Timestamp('2010-05-13 04:00:00', tz='UTC'), right=pd.Timestamp('2010-05-13 08:00:00', tz='UTC')),
+    #               pd.Interval(left=pd.Timestamp('2010-05-13 08:00:00', tz='UTC'), right=pd.Timestamp('2010-05-13 12:00:00', tz='UTC'))]
 
     with Pool(processes=n_workers) as pool:
         for tinterval in tintervals[0:2]:
             t1 = time.time()
             logger.info('Starting interval processing for {:s}'.format(tinterval.left.strftime('%Y %m %d')))
-            # groups = spikes_df['GroupNumber'].loc[(spikes_df['Time'] >= '2010-12-01 21:00:00') & (spikes_df['Time'] < '2010-12-01 23:59:59')].unique()
             groups = spikes_df['GroupNumber'].loc[(spikes_df['Time'] >= tinterval.left) & (spikes_df['Time'] < tinterval.right)].unique()
-            group_df_list = pool.map(process_group, groups, 100)
-            df = pd.concat(group_df_list)
+            print('ngroups = ', len(groups))
+            group_df_list = pool.map(process_group, groups, 10)
             print('processed dataframe for {:s}'.format(tinterval.left.strftime('%Y %m %d')))
+            process_time = time.time() - t1
             logger.info('processed dataframe for {:s}'.format(tinterval.left.strftime('%Y %m %d')))
-            # Write to parquet file
-            date = tinterval.left
-            day_dir = PurePath(outputdir, '{:d}/{:02d}'.format(date.year, date.month)).as_posix()
-            Path(day_dir).mkdir(parents=True, exist_ok=True)
-            df_path = PurePath(day_dir, 'df_coincidentals_{:d}_{:02d}_{:02d}.parquet'.format(date.year, date.month,
-                                                                                             date.day)).as_posix()
-            ns.df = df
-            res = pool.apply_async(write_to_parquet, (ns, df_path))
-            temp = res.get()
-            # write_to_parquet(df, tinterval.left, outputdir)
+            # write_to_parquet(group_df_list, tinterval.left)
+            write_thread = threading.Thread(target=write_to_parquet, args=(group_df_list, tinterval.left))
+            write_thread.start()
             etime = time.time() - t1
-            print('Wall time: {:1.2f} min'.format(etime / 60))
+            print('Wall time: {:1.2f} s'.format(etime))
+            logger.info('Wall time: {:1.2f} s'.format(etime))
 
     etime = time.time() - tstart
-
-    print('Total wall time: {:1.2f} min'.format(etime/60))
+    print('Total wall time: {:1.2f} s'.format(etime))
