@@ -27,6 +27,9 @@ class SpikesDB:
         self.time_gen()
         self.wave_gen()
         self.group_gen()
+        # remove empty files
+        self.df.drop(self.df[self.df['Size'] < 100].index, inplace=True)
+        self.filter_incomplete_groups()
 
         parquet_f = os.path.join(self.dir, self.df_name)
         self.df.to_parquet(parquet_f, engine='pyarrow', compression=None)
@@ -69,4 +72,17 @@ class SpikesDB:
         t2 = time.time()
         dt1 = t2 - t1
         print('wall clock time elapsed: ', dt1)
+
+    def filter_incomplete_groups(self):
+        print('removing incomplete groups')
+        t1 = time.time()
+        self.df.drop_duplicates(['GroupNumber', 'Wavelength'], inplace=True)
+        mask_incomplete = self.df.groupby('GroupNumber')['Wavelength'].count() != 7
+        incomplete_groups = mask_incomplete[mask_incomplete].index.values
+        incomplete_groups_idx = self.df.loc[self.df['GroupNumber'].isin(incomplete_groups)].index
+        self.df.drop(incomplete_groups_idx, inplace=True)
+        t2 = time.time()
+        dt1 = t2 - t1
+        print('wall clock time elapsed: ', dt1)
+
 

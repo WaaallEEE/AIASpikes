@@ -71,15 +71,13 @@ def write_to_parquet(df_list, date):
     df = pd.concat(df_list)
     df.to_parquet(df_path, engine='pyarrow', compression=None)
     # print('parquet file created: {:s}'.format(df_path))
-    #logger.info('parquet file created: {:s}'.format(df_path))
+    # logger.info('parquet file created: {:s}'.format(df_path))
     return df_path
 
 
 
 if __name__ == '__main__':
-
-
-    outputdir = PurePath('/media/user/SPIKESDF/', 'raphael/data/AIA_Spikes/parquet_dataframes').as_posix()
+    outputdir = PurePath('/media/user/SPIKESDF/', 'raphael/data/AIA_Spikes/parquet_dataframes2').as_posix()
     Path(outputdir).mkdir(parents=True, exist_ok=True)
 
     logging.basicConfig(filename=PurePath(outputdir, 'files_creation_times.log').as_posix(),
@@ -88,13 +86,6 @@ if __name__ == '__main__':
                         format='%(asctime)s %(levelname)-8s %(message)s')
     logger = logging.getLogger("my logger")
 
-    # Create data for lookup from the child processes.
-
-    spikes_df = pd.read_parquet(os.path.join(os.environ['SPIKESDATA'], 'spikes_df_2010_filtered.parquet'), engine='pyarrow')
-    spikes_df2 = spikes_df.set_index(['GroupNumber', 'Time'])
-    path_Series = spikes_df2['Path']
-    tintervals = pd.interval_range(start=pd.Timestamp('2010-05-13 00:00:00', tz='UTC'), end=pd.Timestamp('2011-01-01 00:00:00', tz='UTC'),
-                                   freq='D', closed='left')
 
 
     n_workers = 60
@@ -108,8 +99,13 @@ if __name__ == '__main__':
 
     # Create data for lookup from the child processes.
 
-    spikes_df = pd.read_parquet(os.path.join(os.environ['SPIKESDATA'], 'spikes_df_2010_filtered.parquet'), engine='pyarrow')
+    # Create data for lookup from the child processes.
+
+    spikes_df = pd.read_parquet(os.path.join(os.environ['SPIKESDATA'], 'spikes_df_2010.parquet'), engine='pyarrow')
     spikes_df2 = spikes_df.set_index(['GroupNumber', 'Time'])
+    # tintervals = pd.interval_range(start=pd.Timestamp('2010-05-13 00:00:00', tz='UTC'),
+    #                                end=pd.Timestamp('2011-01-01 00:00:00', tz='UTC'),
+    #                                freq='D', closed='left')
     #
     # tintervals = [pd.Interval(left=pd.Timestamp('2010-05-13 00:00:00', tz='UTC'), right=pd.Timestamp('2010-05-13 04:00:00', tz='UTC')),
     #               pd.Interval(left=pd.Timestamp('2010-05-13 04:00:00', tz='UTC'), right=pd.Timestamp('2010-05-13 08:00:00', tz='UTC')),
@@ -117,29 +113,33 @@ if __name__ == '__main__':
 
     index_8nb_id = ray.put(lut_8nb)
 
-    for tinterval in tintervals[0:2]:
+    #for tinterval in tintervals[0:2]:
+    tinterval = pd.Interval(left=pd.Timestamp('2010-05-29 00:00:00', tz='UTC'), right=pd.Timestamp('2010-05-30 04:00:00', tz='UTC'))
 
-        t1 = time.time()
-        groups = spikes_df['GroupNumber'].loc[(spikes_df['Time'] >= tinterval.left) & (spikes_df['Time'] < tinterval.right)].unique()
-        print('ngroups = ', len(groups))
-        fpaths_list = [spikes_df2['Path'].loc[group_n] for group_n in groups]
+    t1 = time.time()
+    logger.info('Starting interval processing for {:s}'.format(tinterval.left.strftime('%Y %m %d')))
+    groups = spikes_df['GroupNumber'].loc[(spikes_df['Time'] >= tinterval.left) & (spikes_df['Time'] < tinterval.right)].unique()
+    print('ngroups = ', len(groups))
+    fpaths_list = [spikes_df2['Path'].loc[group_n] for group_n in groups]
+    group_df_list = ray.get([process_group.remote(index_8nb_id, fpaths, group_n) for (fpaths, group_n) in zip(fpaths_list, groups)])
+    print('processed dataframe for {:s}'.format(tinterval.left.strftime('%Y %m %d')))
+    process_time = time.time() - t1
+    logger.info('processed dataframe for {:s}'.format(tinterval.left.strftime('%Y %m %d')))
+    print('Wall processing time: {:1.2f} s'.format(process_time))
+    tw1 = time.time()
+    # write_to_parquet(group_df_list, tinterval.left)
+    # write_thread = threading.Thread(target=write_to_parquet, args=(group_df_list, tinterval.left))
+    # write_thread.start()
+    write_to_parquet.remote(group_df_list, tinterval.left)
+    wtime = time.time() - tw1
+    print('Wall write time: {:1.2f} s'.format(wtime))
+    logger.info('Wall write time: {:1.2f} s'.format(wtime))
 
-
-        group_df_list = ray.get([process_group.remote(index_8nb_id, fpaths, group_n) for (fpaths, group_n) in zip(fpaths_list, groups)])
-        process_time = time.time() - t1
-        print('Wall processing time: {:1.2f} s'.format(process_time))
-
-        tw1 = time.time()
-        # write_to_parquet(group_df_list, tinterval.left)
-        # write_thread = threading.Thread(target=write_to_parquet, args=(group_df_list, tinterval.left))
-        # write_thread.start()
-        write_to_parquet.remote(group_df_list, tinterval.left)
-        wtime = time.time() - tw1
-        print('Wall write time: {:1.2f} s'.format(wtime))
-
-        etime = time.time() - t1
-        print('Wall time: {:1.2f} s'.format(etime))
-
+    etime = time.time() - t1
+    print('Wall time: {:1.2f} s'.format(etime))
+    logger.info('Wall time: {:1.2f} s'.format(etime))
 
     etime = time.time() - tstart
     print('Total wall time: {:1.2f} s'.format(etime))
+
+    ray.shutdown()

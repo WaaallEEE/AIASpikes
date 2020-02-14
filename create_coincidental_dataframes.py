@@ -4,9 +4,12 @@ import numpy as np
 import fitsio
 from pathlib import Path, PurePath
 from multiprocessing import Pool
+from multiprocessing.dummy import Pool as ThreadPool
 import time
 import logging
 import threading
+import gc
+from concurrent.futures import ThreadPoolExecutor
 
 
 def create_lookup_8nb(nx, ny):
@@ -71,12 +74,15 @@ def write_to_parquet(df_list, date):
     df = pd.concat(df_list)
     df.to_parquet(df_path, engine='pyarrow', compression=None)
     logger.info('parquet file created: {:s}'.format(df_path))
-    return df_path
+    del df_list
+    del df
+    gc.collect()
+    return None
 
 
 if __name__ == '__main__':
 
-    outputdir = PurePath('/media/user/SPIKESDF/', 'raphael/data/AIA_Spikes/parquet_dataframes').as_posix()
+    outputdir = PurePath('/media/user/SPIKESDF/', 'raphael/data/AIA_Spikes/parquet_dataframes2').as_posix()
     Path(outputdir).mkdir(parents=True, exist_ok=True)
 
     logging.basicConfig(filename=PurePath(outputdir, 'files_creation_times.log').as_posix(),
@@ -91,21 +97,29 @@ if __name__ == '__main__':
                                 engine='pyarrow')
     spikes_df2 = spikes_df.set_index(['GroupNumber', 'Time'])
     path_Series = spikes_df2['Path']
-    tintervals = pd.interval_range(start=pd.Timestamp('2010-05-13 00:00:00', tz='UTC'),
-                                   end=pd.Timestamp('2011-01-01 00:00:00', tz='UTC'),
-                                   freq='D', closed='left')
+    # tintervals = pd.interval_range(start=pd.Timestamp('2010-05-13 00:00:00', tz='UTC'),
+    #                                end=pd.Timestamp('2011-01-01 00:00:00', tz='UTC'),
+    #                                freq='D', closed='left')
+
+    # tintervals = pd.interval_range(start=pd.Timestamp('2010-05-13 00:00:00', tz='UTC'),
+    #                                end=pd.Timestamp('2010-05-20 00:00:00', tz='UTC'),
+    #                                freq='D', closed='left')
 
     n_workers = 60
     tstart = time.time()
     logger.info('Starting pool of {:d} workers'.format(n_workers))
 
-    # start, end = pd.Timestamp('2010-05-13 00:00:00', tz='UTC'), pd.Timestamp('2010-05-13 02:00:00', tz='UTC')
-    # tintervals = [pd.Interval(left=pd.Timestamp('2010-05-13 00:00:00', tz='UTC'), right=pd.Timestamp('2010-05-13 04:00:00', tz='UTC')),
-    #               pd.Interval(left=pd.Timestamp('2010-05-13 04:00:00', tz='UTC'), right=pd.Timestamp('2010-05-13 08:00:00', tz='UTC')),
-    #               pd.Interval(left=pd.Timestamp('2010-05-13 08:00:00', tz='UTC'), right=pd.Timestamp('2010-05-13 12:00:00', tz='UTC'))]
+    start, end = pd.Timestamp('2010-05-13 00:00:00', tz='UTC'), pd.Timestamp('2010-05-13 02:00:00', tz='UTC')
+    tintervals = [pd.Interval(left=pd.Timestamp('2010-05-13 00:00:00', tz='UTC'), right=pd.Timestamp('2010-05-13 04:00:00', tz='UTC')),
+                  pd.Interval(left=pd.Timestamp('2010-05-13 04:00:00', tz='UTC'), right=pd.Timestamp('2010-05-13 08:00:00', tz='UTC')),
+                  pd.Interval(left=pd.Timestamp('2010-05-13 08:00:00', tz='UTC'), right=pd.Timestamp('2010-05-13 12:00:00', tz='UTC'))]
+
+    # write_pool = ThreadPool(1) # cannot do that, data aren't pickable.
+    executor = ThreadPoolExecutor(max_workers=1)
+
 
     with Pool(processes=n_workers) as pool:
-        for tinterval in tintervals[0:2]:
+        for tinterval in tintervals:
             t1 = time.time()
             logger.info('Starting interval processing for {:s}'.format(tinterval.left.strftime('%Y %m %d')))
             groups = spikes_df['GroupNumber'].loc[(spikes_df['Time'] >= tinterval.left) & (spikes_df['Time'] < tinterval.right)].unique()
@@ -115,11 +129,17 @@ if __name__ == '__main__':
             process_time = time.time() - t1
             logger.info('processed dataframe for {:s}'.format(tinterval.left.strftime('%Y %m %d')))
             # write_to_parquet(group_df_list, tinterval.left)
-            write_thread = threading.Thread(target=write_to_parquet, args=(group_df_list, tinterval.left))
-            write_thread.start()
+            # write_thread = threading.Thread(target=write_to_parquet, args=(group_df_list, tinterval.left))
+            # write_thread.start()
+            tw1 = time.time()
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(write_to_parquet, args=(group_df_list, tinterval.left))
+            wtime = time.time() - tw1
+            print('write time (s): ', wtime)
+
             etime = time.time() - t1
             print('Wall time: {:1.2f} s'.format(etime))
             logger.info('Wall time: {:1.2f} s'.format(etime))
 
     etime = time.time() - tstart
-    print('Total wall time: {:1.2f} s'.format(etime))
+    print('Total wall time: {:1.2f} min'.format(etime/60))
