@@ -44,7 +44,8 @@ def extract_coincidentals(spikes_list, idx):
     # Sublist of spikes data that will excludes the one serving as template
     spikes_sublist = spikes_list[:idx] + spikes_list[idx + 1:]
     # Coincidental cross-referencing.
-    mask_w_arr = np.array([np.isin(nb_pixels, index_8nb[spikes[0, :], :]).any(axis=1) for spikes in spikes_sublist])
+    # mask_w_arr = np.array([np.isin(nb_pixels, index_8nb[spikes[0, :], :]).any(axis=1) for spikes in spikes_sublist])
+    mask_w_arr = np.array([np.isin(nb_pixels, spikes[0, :]).any(axis=1) for spikes in spikes_sublist])
     select_pixels = mask_w_arr.any(axis=0)
     coords_w = spikes_w[0, select_pixels]
     w_tables = np.insert(mask_w_arr[:, select_pixels], idx, True, axis=0)
@@ -82,7 +83,7 @@ def write_to_parquet(df_list, date):
 
 if __name__ == '__main__':
 
-    outputdir = PurePath('/media/user/SPIKESDF/', 'raphael/data/AIA_Spikes/parquet_dataframes2').as_posix()
+    outputdir = os.path.expanduser('~/raphael/data/AIA_Spikes/parquet_dataframes2')
     Path(outputdir).mkdir(parents=True, exist_ok=True)
 
     logging.basicConfig(filename=PurePath(outputdir, 'files_creation_times.log').as_posix(),
@@ -93,33 +94,23 @@ if __name__ == '__main__':
 
     # Create data for lookup from the child processes.
     index_8nb = create_lookup_8nb(4096, 4096)
-    spikes_df = pd.read_parquet(os.path.join(os.environ['SPIKESDATA'], 'spikes_df_2010_filtered.parquet'),
+    spikes_df = pd.read_parquet(os.path.join(os.environ['SPIKESDATA'], 'spikes_df_2010.parquet'),
                                 engine='pyarrow')
     spikes_df2 = spikes_df.set_index(['GroupNumber', 'Time'])
     path_Series = spikes_df2['Path']
-    # tintervals = pd.interval_range(start=pd.Timestamp('2010-05-13 00:00:00', tz='UTC'),
-    #                                end=pd.Timestamp('2011-01-01 00:00:00', tz='UTC'),
-    #                                freq='D', closed='left')
+    tintervals = pd.interval_range(start=pd.Timestamp('2010-05-13 00:00:00', tz='UTC'),
+                                   end=pd.Timestamp('2010-05-16 00:00:00', tz='UTC'),
+                                   freq='D', closed='left')
 
-    # tintervals = pd.interval_range(start=pd.Timestamp('2010-05-13 00:00:00', tz='UTC'),
-    #                                end=pd.Timestamp('2010-05-20 00:00:00', tz='UTC'),
-    #                                freq='D', closed='left')
 
     n_workers = 60
     tstart = time.time()
     logger.info('Starting pool of {:d} workers'.format(n_workers))
 
-    start, end = pd.Timestamp('2010-05-13 00:00:00', tz='UTC'), pd.Timestamp('2010-05-13 02:00:00', tz='UTC')
-    tintervals = [pd.Interval(left=pd.Timestamp('2010-05-13 00:00:00', tz='UTC'), right=pd.Timestamp('2010-05-13 04:00:00', tz='UTC')),
-                  pd.Interval(left=pd.Timestamp('2010-05-13 04:00:00', tz='UTC'), right=pd.Timestamp('2010-05-13 08:00:00', tz='UTC')),
-                  pd.Interval(left=pd.Timestamp('2010-05-13 08:00:00', tz='UTC'), right=pd.Timestamp('2010-05-13 12:00:00', tz='UTC'))]
-
     # write_pool = ThreadPool(1) # cannot do that, data aren't pickable.
-    executor = ThreadPoolExecutor(max_workers=1)
-
-
+    # executor = ThreadPoolExecutor(max_workers=1)
     with Pool(processes=n_workers) as pool:
-        for tinterval in tintervals:
+        for i, tinterval in enumerate(tintervals):
             t1 = time.time()
             logger.info('Starting interval processing for {:s}'.format(tinterval.left.strftime('%Y %m %d')))
             groups = spikes_df['GroupNumber'].loc[(spikes_df['Time'] >= tinterval.left) & (spikes_df['Time'] < tinterval.right)].unique()
@@ -128,18 +119,19 @@ if __name__ == '__main__':
             print('processed dataframe for {:s}'.format(tinterval.left.strftime('%Y %m %d')))
             process_time = time.time() - t1
             logger.info('processed dataframe for {:s}'.format(tinterval.left.strftime('%Y %m %d')))
-            # write_to_parquet(group_df_list, tinterval.left)
-            # write_thread = threading.Thread(target=write_to_parquet, args=(group_df_list, tinterval.left))
-            # write_thread.start()
+
             tw1 = time.time()
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(write_to_parquet, args=(group_df_list, tinterval.left))
+            # write_to_parquet(group_df_list, tinterval.left)
+            write_thread = threading.Thread(target=write_to_parquet, args=(group_df_list, tinterval.left))
+            write_thread.start()
             wtime = time.time() - tw1
             print('write time (s): ', wtime)
 
             etime = time.time() - t1
             print('Wall time: {:1.2f} s'.format(etime))
             logger.info('Wall time: {:1.2f} s'.format(etime))
+
+    write_thread.join()
 
     etime = time.time() - tstart
     print('Total wall time: {:1.2f} min'.format(etime/60))

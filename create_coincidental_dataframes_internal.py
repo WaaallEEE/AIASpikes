@@ -98,9 +98,9 @@ if __name__ == '__main__':
                                 engine='pyarrow')
     spikes_df2 = spikes_df.set_index(['GroupNumber', 'Time'])
     path_Series = spikes_df2['Path']
-    # tintervals = pd.interval_range(start=pd.Timestamp('2010-05-13 00:00:00', tz='UTC'),
-    #                                end=pd.Timestamp('2011-01-01 00:00:00', tz='UTC'),
-    #                                freq='D', closed='left')
+    tintervals = pd.interval_range(start=pd.Timestamp('2010-05-13 00:00:00', tz='UTC'),
+                                   end=pd.Timestamp('2010-05-16 00:00:00', tz='UTC'),
+                                   freq='D', closed='left')
 
     # tintervals = pd.interval_range(start=pd.Timestamp('2010-05-13 00:00:00', tz='UTC'),
     #                                end=pd.Timestamp('2010-05-20 00:00:00', tz='UTC'),
@@ -111,8 +111,8 @@ if __name__ == '__main__':
     logger.info('Starting pool of {:d} workers'.format(n_workers))
 
 
-    tintervals = [pd.Interval(left=pd.Timestamp('2010-05-13 00:00:00', tz='UTC'), right=pd.Timestamp('2010-05-14 00:00:00', tz='UTC')),
-                  pd.Interval(left=pd.Timestamp('2010-05-29 00:00:00', tz='UTC'), right=pd.Timestamp('2010-05-30 00:00:00', tz='UTC'))]
+    # tintervals = [pd.Interval(left=pd.Timestamp('2010-05-13 00:00:00', tz='UTC'), right=pd.Timestamp('2010-05-14 00:00:00', tz='UTC')),
+    #               pd.Interval(left=pd.Timestamp('2010-05-29 00:00:00', tz='UTC'), right=pd.Timestamp('2010-05-30 00:00:00', tz='UTC'))]
 
     # write_pool = ThreadPool(1) # cannot do that, data aren't pickable.
     # executor = ThreadPoolExecutor(max_workers=1)
