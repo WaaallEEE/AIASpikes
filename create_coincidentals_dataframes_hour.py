@@ -83,7 +83,6 @@ def filter_groups_intervals(groups_list):
     return groups_list3, idx3
 
 
-
 if __name__ == '__main__':
 
     outputdir = os.path.expanduser('~/Data/AIA_Spikes/SPIKESDF/parquet_dataframes2')
@@ -95,7 +94,7 @@ if __name__ == '__main__':
     spikes_df2 = spikes_df.set_index(['GroupNumber', 'Time'])
     path_Series = spikes_df2['Path']
 
-    tintervals = pd.interval_range(start=pd.Timestamp('2010-05-29 00:00:00', tz='UTC'),
+    tintervals = pd.interval_range(start=pd.Timestamp('2010-05-29 06:00:00', tz='UTC'),
                                    end=pd.Timestamp('2010-05-30 00:00:00', tz='UTC'),
                                    freq='1H', closed='left')
 
@@ -105,16 +104,15 @@ if __name__ == '__main__':
                         for tinterval in tintervals]
 
     groups_intervals2, tinds = filter_groups_intervals(groups_intervals)
-    tintervals2 = tintervals[tinds]
     # Get the actual time stamps of these groups
-
+    tintervals2 = tintervals[tinds]
 
     tstart = time.time()
     for t, groups in enumerate(groups_intervals2):
 
         print('ngroups = ', len(groups))
         group_df_list = list(map(process_group, groups))
-        write_to_parquet(group_df_list, tinterval.left)
+        write_to_parquet(group_df_list, tintervals2[t].left)
 
     etime = time.time() - tstart
     print('Total wall time: {:1.2f} min'.format(etime / 60))
