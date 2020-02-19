@@ -98,8 +98,8 @@ if __name__ == '__main__':
                                 engine='pyarrow')
     spikes_df2 = spikes_df.set_index(['GroupNumber', 'Time'])
     path_Series = spikes_df2['Path']
-    tintervals = pd.interval_range(start=pd.Timestamp('2010-05-13 00:00:00', tz='UTC'),
-                                   end=pd.Timestamp('2010-05-16 00:00:00', tz='UTC'),
+    tintervals = pd.interval_range(start=pd.Timestamp('2010-06-13 00:00:00', tz='UTC'),
+                                   end=pd.Timestamp('2010-06-16 00:00:00', tz='UTC'),
                                    freq='D', closed='left')
 
 
