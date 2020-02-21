@@ -4,9 +4,12 @@ import numpy as np
 import fitsio
 from pathlib import Path, PurePath
 from multiprocessing import Pool
+from multiprocessing.dummy import Pool as ThreadPool
 import time
 import logging
 import threading
+import gc
+from concurrent.futures import ThreadPoolExecutor
 
 
 def create_lookup_8nb(nx, ny):
@@ -72,6 +75,9 @@ def write_to_parquet(df_list, date):
     df = pd.concat(df_list)
     df.to_parquet(df_path, engine='pyarrow', compression=None)
     logger.info('parquet file created: {:s}'.format(df_path))
+    del df_list
+    del df
+    gc.collect()
     return None
 
 
