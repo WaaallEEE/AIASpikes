@@ -4,4 +4,5 @@ __pycache__/*
 dask-worker-space
 dask-worker-space/*
 .ipynb_checkpoints
-
+*/.ipynb_checkpoints/*
+.env
