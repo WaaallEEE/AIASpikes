@@ -1,8 +1,8 @@
 import os
 from SpikesDB2 import SpikesDB
 
-# Text file containing all file paths
+# Text file containing all file paths (relative)
 datadir = os.environ['SPIKESDATA']
-flist = os.path.join(datadir, 'file_list_2010.txt')
-spikes = SpikesDB(flist, datadir, 'spikes_df_2010.parquet')
+source_file_list = 'file_list_2018.txt'
+spikes = SpikesDB(source_file_list, datadir, 'spikes_df_2018.parquet')
 spikes.db_gen()

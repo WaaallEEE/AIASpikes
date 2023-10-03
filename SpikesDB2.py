@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 import pandas as pd
 import time
@@ -7,22 +6,17 @@ import time
 class SpikesDB:
 
     def __init__(self, source_file_list, datadir, df_name):
-        self.flist = Path(source_file_list)
+        self.flist = Path(datadir, source_file_list)
         self.datadir = datadir
-        self.dir = os.path.abspath(self.flist.parent)
-        self.df = None
-        self.fnames = None
-        self.df_name = df_name
-
-    def db_gen(self):
-
-        # Time in JD | Time in YMD | Wavelength | file path | file size
-
-        t1 = time.time()
         self.df = pd.read_csv(self.flist, names=['Path'], dtype=object)
         self.df.sort_values(by=['Path'], inplace=True)
         self.df.reset_index(inplace=True, drop=True)
-        self.fnames = self.df['Path'].apply(lambda s: s.split('/')[-1])
+        self.fnames = self.df['Path'].apply(lambda s: Path(s).name)
+        self.df_name = df_name
+
+    def db_gen(self):
+        # Time in JD | Time in YMD | Wavelength | file path | file size
+        t1 = time.time()
         self.filesize_gen()
         self.time_gen()
         self.wave_gen()
@@ -31,8 +25,8 @@ class SpikesDB:
         self.df.drop(self.df[self.df['Size'] < 100].index, inplace=True)
         self.filter_incomplete_groups()
 
-        parquet_f = os.path.join(self.dir, self.df_name)
-        self.df.to_parquet(parquet_f, engine='pyarrow', compression=None)
+        parquet_f = Path(self.datadir, self.df_name)
+        self.df.to_parquet(parquet_f, engine='pyarrow', compression='snappy')
         print('Spikes database file stored in: ', parquet_f)
 
         t2 = time.time()
@@ -42,7 +36,8 @@ class SpikesDB:
     def filesize_gen(self):
         print('Getting file sizes...')
         t1 = time.time()
-        self.df['Size'] = self.df['Path'].apply(lambda file: os.path.getsize(os.path.join(self.datadir, file)))
+        # File size in bytes
+        self.df['Size'] = self.df['Path'].apply(lambda file: Path(self.datadir, file).stat().st_size)
         t2 = time.time()
         dt1 = t2 - t1
         print('wall clock time elapsed: ', dt1)
@@ -76,11 +71,9 @@ class SpikesDB:
     def filter_incomplete_groups(self):
         print('removing incomplete groups')
         t1 = time.time()
+        # Get rid of groups that would have the same wavelength within 12s
         self.df.drop_duplicates(['GroupNumber', 'Wavelength'], inplace=True)
-        mask_incomplete = self.df.groupby('GroupNumber')['Wavelength'].count() != 7
-        incomplete_groups = mask_incomplete[mask_incomplete].index.values
-        incomplete_groups_idx = self.df.loc[self.df['GroupNumber'].isin(incomplete_groups)].index
-        self.df.drop(incomplete_groups_idx, inplace=True)
+        self.df = self.df.groupby('GroupNumber').filter(lambda x: x['GroupNumber'].count() == 7)
         t2 = time.time()
         dt1 = t2 - t1
         print('wall clock time elapsed: ', dt1)
