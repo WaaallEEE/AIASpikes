@@ -7,17 +7,22 @@ logging.basicConfig(filename='bulk_rename.log', encoding='utf-8', level=logging.
 
 # Build directory structure
 spikes_dir = '/mnt/data3/SDO/AIA/spikes/'
-years = list(range(2018, 2019))
-months = list(range(3, 4))
+years = list(range(2010, 2011))
+months = list(range(5, 13))
 
 for year in years:
     yearstr = str(year)
+    print(yearstr)
     for month in months:
         monthstr = f'{month:02d}'
+        print(monthstr)
         for daydir in sorted(Path(spikes_dir, yearstr, monthstr).iterdir()):
+            print(daydir)
             for hourdir in sorted(daydir.iterdir()):
                 files = sorted(hourdir.glob('*.fits'))
                 for pf in files:
+                    print(pf)
+                    print(pf.stem[13])
                     if pf.stem[13] == ':':
                         if pf.stem[17:19] == '60':
                             logging.info(f'60-second anomaly: {pf.name}')
