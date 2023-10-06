@@ -2,11 +2,11 @@ import os
 import pandas as pd
 import numpy as np
 import fitsio
-from pathlib import Path, PurePath
+from pathlib import Path
 from multiprocessing import Pool
 import time
 import logging
-import threading
+from functools import partial
 
 
 def create_lookup_8nb(nx, ny):
@@ -33,11 +33,11 @@ def create_lookup_8nb(nx, ny):
     return lookup_coords
 
 
-def extract_coincidentals(spikes_list, idx):
+def extract_coincidentals(spikes_list, idx, lookup_8nb):
     # Spikes coordinates at given wavelength index
     spikes_w = spikes_list[idx]
     # Associated neighbour coordinates
-    nb_pixels = index_8nb[spikes_w[0, :], :]
+    nb_pixels = lookup_8nb[spikes_w[0, :], :]
     # Sublist of spikes data that will excludes the one serving as template
     spikes_sublist = spikes_list[:idx] + spikes_list[idx + 1:]
     # Coincidental cross-referencing.
@@ -54,78 +54,67 @@ def extract_coincidentals(spikes_list, idx):
     return arr_w
 
 
-def process_group(group_n):
-    fpaths = path_Series.loc[group_n]
+def process_group(df, group_n, lookup_8nb):
+    fpaths = df['Path'].loc[group_n]
     spikes_list = [fitsio.read(os.path.join(os.environ['SPIKESDATA'], f)) for f in fpaths]
-    group_data = np.concatenate([extract_coincidentals(spikes_list, i) for i in range(7)], axis=1)
+    group_data = np.concatenate([extract_coincidentals(spikes_list, i, lookup_8nb) for i in range(7)], axis=1)
     column_names = ['coords', 'int1', 'int2', 'wref', 'w0', 'w1', 'w2', 'w3', 'w4', 'w5', 'w6']
-    coincidental_spikes_df = pd.DataFrame(group_data.T, columns=column_names)
-    coincidental_spikes_df['GroupNumber'] = group_n
-    return coincidental_spikes_df
+    overlaps_df = pd.DataFrame(group_data.T, columns=column_names)
+    overlaps_df.insert(0, 'GroupNumber', group_n)
+    overlaps_df['overlaps'] = overlaps_df[['w0', 'w1', 'w2', 'w3', 'w4', 'w5', 'w6']].sum(axis=1).astype(np.uint8)
+    return overlaps_df
 
 
-def write_to_parquet(df_list, date):
-    logger.info('Writing to parquet')
-    month_dir = PurePath(outputdir, '{:d}/{:02d}'.format(date.year, date.month)).as_posix()
-    Path(month_dir).mkdir(parents=True, exist_ok=True)
-    df_path = PurePath(month_dir, 'df_coincidentals_{:d}_{:02d}_{:02d}.parquet'.format(date.year, date.month, date.day)).as_posix()
-    df = pd.concat(df_list)
-    df.to_parquet(df_path, engine='pyarrow', compression=None)
-    logger.info('parquet file created: {:s}'.format(df_path))
+def process_interval(tinterv, lookup_8nb):
+    print('Processing time interval: ', tinterv)
+    spikes_df2 = spikes_df.loc[(spikes_df['Time'] >= tinterv.left) & (spikes_df['Time'] < tinterv.right)].set_index(['GroupNumber', 'Time'])
+    groups = spikes_df2.index.get_level_values(0).unique().values
+    df_list = [process_group(spikes_df2, n, lookup_8nb) for n in groups]
+    group_df = pd.concat(df_list)
+    return group_df
+
+
+def write_to_parquet(df, date, outputdir):
+    month_dir = Path(outputdir, f'{date.year}', f'{date.month:02d}')
+    month_dir.mkdir(parents=True, exist_ok=True)
+    df_path = Path(month_dir, f'df_coincidentals_{date.year}_{date.month:02d}_{date.day:02d}.parquet')
+    df.to_parquet(df_path, engine='pyarrow')
     return None
+
+
+# Global scope for shared lookup
+outputdir = os.environ['SPIKESDATA']
+spikes_df = pd.read_parquet(Path(outputdir, 'spikes_df_2018.parquet'), engine='pyarrow')
 
 
 if __name__ == '__main__':
 
-    outputdir = os.path.expanduser('~/raphael/data/AIA_Spikes/parquet_dataframes2')
-    Path(outputdir).mkdir(parents=True, exist_ok=True)
-
-    logging.basicConfig(filename=PurePath(outputdir, 'files_creation_times.log').as_posix(),
+    logging.basicConfig(filename=Path(outputdir, 'profiling.log').as_posix(),
                         datefmt='%Y-%m-%d %H:%M:%S',
                         level=logging.INFO,
                         format='%(asctime)s %(levelname)-8s %(message)s')
     logger = logging.getLogger("my logger")
 
+
+    tstart = pd.Timestamp('2018-01-01 00:00:00', tz='UTC')
+    tend = pd.Timestamp('2018-01-02 00:00:00', tz='UTC')
+    tintervals = pd.interval_range(start=tstart,
+                                   end=tend,
+                                   freq='H',
+                                   closed='left')
     # Create data for lookup from the child processes.
     index_8nb = create_lookup_8nb(4096, 4096)
-    spikes_df = pd.read_parquet(os.path.join(os.environ['SPIKESDATA'], 'spikes_df_2010.parquet'),
-                                engine='pyarrow')
-    spikes_df2 = spikes_df.set_index(['GroupNumber', 'Time'])
-    path_Series = spikes_df2['Path']
-    tintervals = pd.interval_range(start=pd.Timestamp('2010-06-13 00:00:00', tz='UTC'),
-                                   end=pd.Timestamp('2010-06-16 00:00:00', tz='UTC'),
-                                   freq='D', closed='left')
 
+    n_workers = 10
+    profile_tstart = time.time()
+    logger.info(f'Starting pool of {n_workers} workers')
 
-    n_workers = 60
-    tstart = time.time()
-    logger.info('Starting pool of {:d} workers'.format(n_workers))
-
-    # write_pool = ThreadPool(1) # cannot do that, data aren't pickable.
-    # executor = ThreadPoolExecutor(max_workers=1)
     with Pool(processes=n_workers) as pool:
-        for i, tinterval in enumerate(tintervals):
-            t1 = time.time()
-            logger.info('Starting interval processing for {:s}'.format(tinterval.left.strftime('%Y %m %d')))
-            groups = spikes_df['GroupNumber'].loc[(spikes_df['Time'] >= tinterval.left) & (spikes_df['Time'] < tinterval.right)].unique()
-            print('ngroups = ', len(groups))
-            group_df_list = pool.map(process_group, groups, 10)
-            print('processed dataframe for {:s}'.format(tinterval.left.strftime('%Y %m %d')))
-            process_time = time.time() - t1
-            logger.info('processed dataframe for {:s}'.format(tinterval.left.strftime('%Y %m %d')))
+        partial_process_interval = partial(process_interval, lookup_8nb=index_8nb)
+        group_df_list = pool.map(partial_process_interval, tintervals)
 
-            tw1 = time.time()
-            # write_to_parquet(group_df_list, tinterval.left)
-            write_thread = threading.Thread(target=write_to_parquet, args=(group_df_list, tinterval.left))
-            write_thread.start()
-            wtime = time.time() - tw1
-            print('write time (s): ', wtime)
+    group_df_all_intervals = pd.concat(group_df_list)
+    write_to_parquet(group_df_all_intervals, tstart, outputdir)
 
-            etime = time.time() - t1
-            print('Wall time: {:1.2f} s'.format(etime))
-            logger.info('Wall time: {:1.2f} s'.format(etime))
-
-    write_thread.join()
-
-    etime = time.time() - tstart
-    print('Total wall time: {:1.2f} min'.format(etime/60))
+    etime = (time.time() - profile_tstart)/60
+    logger.info(f'Total wall time: {etime:1.2f} min')

@@ -128,9 +128,7 @@ if __name__ == '__main__':
             logger.info('processed dataframe for {:s}'.format(tinterval.left.strftime('%Y %m %d')))
 
             tw1 = time.time()
-            # write_to_parquet(group_df_list, tinterval.left)
-            write_thread = threading.Thread(target=write_to_parquet, args=(group_df_list, tinterval.left))
-            write_thread.start()
+            write_to_parquet(group_df_list, tinterval.left)
             wtime = time.time() - tw1
             print('write time (s): ', wtime)
 
@@ -138,7 +136,5 @@ if __name__ == '__main__':
             print('Wall time: {:1.2f} s'.format(etime))
             logger.info('Wall time: {:1.2f} s'.format(etime))
 
-    write_thread.join()
-
     etime = time.time() - tstart
-    print('Total wall time: {:1.2f} min'.format(etime/60))
+    logger.info(f'Total wall time: {etime/60:1.2f} min')
