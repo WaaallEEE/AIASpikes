@@ -10,8 +10,8 @@
 
 ## Separate output and error messages into 2 files.
 ## NOTE: %u=userID, %x=jobName, %N=nodeID, %j=jobID, %A=arrayID, %a=arrayTaskID
-#SBATCH --output=/scratch/%u/slurm_output/%x-%N-%A-%a.out  # Output file
-#SBATCH --error=/scratch/%u/slurm_error/%x-%N-%A-%a.err   # Error file
+#SBATCH --output=/scratch/%u/slurm/%x-%N-%A-%a.out  # Output file
+#SBATCH --error=/scratch/%u/slurm/%x-%N-%A-%a.err   # Error file
 
 ## Slurm can send you updates via email
 #SBATCH --mail-type=BEGIN,END,FAIL         # ALL,NONE,BEGIN,END,FAIL,REQUEUE,..
@@ -33,5 +33,4 @@ export PYTHONPATH='~/dev/AIASpikes/data_management'
 export SPIKES='/groups/SPIKES/downloads'
 export SCRATCH='/scratch/rattie'
 ## Run your program or script
-cd /home/rattie/dev/AIASpikes/data_management
 python hourly_tree.py
