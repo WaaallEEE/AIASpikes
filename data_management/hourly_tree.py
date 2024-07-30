@@ -11,7 +11,7 @@ if __name__ == "__main__":
     for y in years:
         for m in months:
             for d in days:
-                tar_file = Path(config.tars_dir, f'{y}_{m:02d}_{d:02d}.tar')
+                tar_file = Path(config.tars_dir, f'spikes_{y}_{m:02d}_{d:02d}.tar')
                 day_dir = Path(config.untar_dir, f'{y}/{m:02d}/{d:02d}')
                 if not day_dir.exists() and tar_file.is_file():
                     print(tar_file)
