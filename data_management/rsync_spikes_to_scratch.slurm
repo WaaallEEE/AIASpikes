@@ -6,7 +6,7 @@
 ## General partitions: all-HiPri, bigmem-HiPri   --   (12 hour limit)
 ##                     all-LoPri, bigmem-LoPri, gpuq  (5 days limit)
 ## Restricted: CDS_q, CS_q, STATS_q, HH_q, GA_q, ES_q, COS_q  (10 day limit)
-#SBATCH --partition=all-LoPri
+#SBATCH --partition=normal
 
 ## Separate output and error messages into 2 files.
 ## NOTE: %u=userID, %x=jobName, %N=nodeID, %j=jobID, %A=arrayID, %a=arrayTaskID
