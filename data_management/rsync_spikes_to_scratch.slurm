@@ -26,6 +26,8 @@
 #SBATCH --time=1-12:00  # Total time needed for job: Days-Hours:Minutes
 
 ## Run your program or script
-rsync /groups/SPIKES/downloads/ /scratch/rattie/spikes
+chmod +x /home/rattie/dev/AIASpikes/data_management/copy_spikes_to_scratch.sh
+/home/rattie/dev/AIASpikes/data_management/copy_spikes_to_scratch.sh
+
 
 
