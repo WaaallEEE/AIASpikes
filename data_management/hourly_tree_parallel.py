@@ -26,7 +26,7 @@ def untar_and_move_files(y, m, d, tars_dir):
     day_dir = Path(tars_dir, f'{y}/{m:02d}/{d:02d}')
 
     if not day_dir.exists() and tar_file.is_file():
-
+        print(f"Processing: {tar_file}")
         # Untar the file (CPU-bound, so this runs in a separate process)
         extract_tar(tar_file, tars_dir)
 
@@ -35,12 +35,15 @@ def untar_and_move_files(y, m, d, tars_dir):
         for d in new_hour_dirs:
             d.mkdir(exist_ok=True)
 
-        # Get the extracted FITS files
-        fpaths = day_dir.glob('*.fits')
+        # Get the extracted FITS files as a list
+        fpaths = list(day_dir.glob('*.fits'))  # Convert generator to list
 
-        # Move files to hourly directories (I/O-bound, done with threads)
-        with ThreadPoolExecutor() as executor:
-            executor.map(move_file_to_hour_dir, fpaths, [day_dir] * len(list(fpaths)))
+        if fpaths:
+            # Move files to hourly directories (I/O-bound, done with threads)
+            with ThreadPoolExecutor() as executor:
+                executor.map(move_file_to_hour_dir, fpaths, [day_dir] * len(fpaths))
+        else:
+            print(f"No FITS files found in {day_dir}")
 
 
 def parallel_process_tar_files(years, months, days, tars_dir, num_workers):
