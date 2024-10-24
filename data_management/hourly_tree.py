@@ -3,8 +3,8 @@ import tarfile
 import config
 from datetime import date, timedelta
 
-
 if __name__ == "__main__":
+
 
     # Define the start and end dates
     start_date = date(config.start_year, config.start_month, config.start_day)
