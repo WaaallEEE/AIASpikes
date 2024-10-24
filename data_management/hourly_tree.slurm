@@ -30,7 +30,6 @@ module load python
 
 ## activate conda environment ML
 export PYTHONPATH='/home/rattie/dev/AIASpikes/data_management'
-export SPIKES='/groups/SPIKES/downloads'
-export SCRATCH='/scratch/rattie'
+export SCRATCHSPIKES='/scratch/rattie/spikes'
 ## Run your program or script
 python hourly_tree.py
