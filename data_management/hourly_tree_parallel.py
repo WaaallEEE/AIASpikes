@@ -61,8 +61,8 @@ if __name__ == "__main__":
     # Define the start and end dates
     start_year = 2010
     end_year = 2010
-    start_month = 5
-    end_month = 5
+    start_month = 6
+    end_month = 12
     start_day = 1
     end_day = 31
 
