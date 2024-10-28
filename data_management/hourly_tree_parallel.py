@@ -19,13 +19,37 @@ def move_file_to_hour_dir(fp, day_dir):
     fp.rename(new_path)
     return new_path
 
+def count_files_in_tar(tar_path):
+    count = 0
+    with tarfile.open(tar_path, 'r') as tar:
+        for member in tar.getmembers():
+            if member.isfile():  # Only count files, skip directories
+                count += 1
+    return count
+
 
 def untar_and_move_files(y, m, d, tars_dir):
     """Untar files for a given year, month, and day, and move the extracted files to hourly directories."""
     tar_file = Path(tars_dir, f'spikes_{y}_{m:02d}_{d:02d}.tar')
     day_dir = Path(tars_dir, f'{y}/{m:02d}/{d:02d}')
 
-    if not day_dir.exists() and tar_file.is_file():
+    if day_dir.exists():
+        print(f"Day dir exists: {day_dir.as_posix()}")
+        # Reprocess if the total number of files does not match the ones in the tar file
+        nfiles_tar = count_files_in_tar(tar_file)
+        nfiles_dir = sum(len(files) for _, _, files in os.walk(day_dir))
+        if nfiles_dir < nfiles_tar:
+            print('reprocessing day dir')
+            fpaths = list(day_dir.glob('*.fits'))  # Convert generator to list
+
+            if fpaths:
+                # Move files to hourly directories (I/O-bound, done with threads)
+                with ThreadPoolExecutor() as executor:
+                    executor.map(move_file_to_hour_dir, fpaths, [day_dir] * len(fpaths))
+            else:
+                print(f"No FITS files found in {day_dir}")
+
+    elif not day_dir.exists() and tar_file.is_file():
         print(f"Processing: {tar_file}")
         # Untar the file (CPU-bound, so this runs in a separate process)
         extract_tar(tar_file, tars_dir)

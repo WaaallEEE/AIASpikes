@@ -23,7 +23,7 @@
 
 
 ## Specify how much time your job needs. (default: see partition above)
-#SBATCH --time=0-1:00  # Total time needed for job: Days-Hours:Minutes
+#SBATCH --time=1-00:00  # Total time needed for job: Days-Hours:Minutes
 
 ## Load the relevant modules needed for the job
 module load python
