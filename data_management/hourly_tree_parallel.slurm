@@ -32,4 +32,4 @@ module load python
 export PYTHONPATH='/home/rattie/dev/AIASpikes/data_management'
 export SCRATCHSPIKES='/scratch/rattie/spikes'
 ## Run your program or script
-python -u hourly_tree_parallel.py
+python hourly_tree_parallel.py
